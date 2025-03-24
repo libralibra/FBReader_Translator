@@ -8,7 +8,6 @@
     - unpacker and packer, tested working
 '''
 
-import os
 import zipfile
 import traceback
 import xml.etree.ElementTree as ET
