@@ -4,12 +4,14 @@
     2025
     update log: 
 
+    v 0.0.2: download en.zip from: https://fbreader.org/static/strings/android/en.zip
     v 0.0.1: initial implementation
     - unpacker and packer, tested working
 '''
 
 import zipfile
 import traceback
+import requests
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -18,6 +20,21 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+def download_zip(url: str, save_path: str) -> bool:
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        
+        with open(save_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        logger.info(f"Downloaded ZIP file to {save_path}")
+        return True
+    except requests.RequestException as e:
+        logger.error(f"Failed to download ZIP file: {e}")
+        return False
+    
 class Unpacker:
     def __init__(self, in_zip : Optional[str] = None, map_file : Optional[str] = None, out_xml : Optional[str] = None) -> None:
         self.in_zip = Path(in_zip) if in_zip else None
@@ -204,36 +221,41 @@ class Packer:
         return msg
 
 if __name__=='__main__':
+    en_url = r'https://fbreader.org/static/strings/android/en.zip'
     src_lang = 'en'
-    des_lang = 'zh'
+    des_lang = 'zh-rTW'
     in_zip = f'{src_lang}.zip'
     out_zip = f'{des_lang}.zip'
     map_file = 'mapping'
     en_xml = f'{src_lang}.xml'
     zh_xml = f'{des_lang}.xml'
     temp_dir = des_lang
-    # unpack
-    if Path(in_zip).exists() and not Path(map_file).exists() and not Path(zh_xml).exists():
-        up = Unpacker(in_zip,map_file,en_xml)
-        if up.unpack():
-            if up.flatten():
-                up.info()
+
+    if download_zip(en_url, in_zip):
+        # unpack
+        if Path(in_zip).exists() and not Path(map_file).exists() and not Path(zh_xml).exists():
+            up = Unpacker(in_zip,map_file,en_xml)
+            if up.unpack():
+                if up.flatten():
+                    up.info()
+                else:
+                    logger.error('Flatten error')
             else:
-                logger.error('Flatten error')
+                logger.error('Unpack error')
         else:
-            logger.error('Unpack error')
-    else:
-        logger.info(f'{in_zip} has been flattened: {en_xml}')
-        logger.info(f'mapping file has been generated: {map_file}')
-    # pack
-    if Path(zh_xml).exists() and Path(map_file).exists() and not Path(out_zip).exists():
-        pc = Packer(zh_xml, map_file, out_zip)
-        if pc.generate():
-            if pc.pack():
-                pc.info()
+            logger.info(f'{in_zip} has been flattened: {en_xml}')
+            logger.info(f'mapping file has been generated: {map_file}')
+        # pack
+        if Path(zh_xml).exists() and Path(map_file).exists() and not Path(out_zip).exists():
+            pc = Packer(zh_xml, map_file, out_zip)
+            if pc.generate():
+                if pc.pack():
+                    pc.info()
+                else:
+                    logger.error('Pack error')
             else:
-                logger.error('Pack error')
+                logger.error('Generate folder error')
         else:
-            logger.error('Generate folder error')
+            logger.info(f'Output file has been generated: {out_zip}')
     else:
-        logger.info(f'Output file has been generated: {out_zip}')
+        logger.error(f'Cannot download en.zip from: {en_url})
