@@ -194,6 +194,7 @@ class XMLZipTranslatorApp:
     def download_zip_callback(self):
         url = self.url.get()
         if not url:
+            self.warn('please enter a URL to download the ZIP file')
             messagebox.showerror("Error", "Please enter a URL to download the ZIP file.")
             return
         
@@ -202,99 +203,129 @@ class XMLZipTranslatorApp:
             defaultextension=".zip", 
             filetypes=[("ZIP files", "*.zip"), ("All files", "*.*")])
         if not save_path:
+            self.warn('download path was not defined')
             return
         
+        self.info(f'downloading zip file {save_path}')
         success = download_zip(url, save_path)
         if success:
             self.in_zip.set(save_path)  # update the in zip path
+            self.info(f'zip file downloaded as {self.in_zip.get()}')
+        else:
+            self.error(f'error while downloading {self.url.get()}')
 
     def browse_zip(self):
         in_zip = filedialog.askopenfilename(filetypes=[("ZIP files", "*.zip")])
         if in_zip and not in_zip.lower().endswith(".zip"):
-                in_zip += ".zip"
+            in_zip += ".zip"
         self.in_zip.set(in_zip)
+        if in_zip:
+            self.info(f'source zip defined {in_zip}')
     
     def save_zip(self):
         out_zip = filedialog.asksaveasfilename(filetypes=[("ZIP files", "*.zip")])
         if out_zip and not out_zip.lower().endswith(".zip"):
-                out_zip += ".zip"
+            out_zip += ".zip"
         self.out_zip.set(out_zip)
+        if out_zip:
+            self.info(f'output zip defined {out_zip}')
     
     def browse_map(self):
         self.map_file.set(filedialog.asksaveasfilename(filetypes=[("No extension", "")]))
+        if self.map_file.get():
+            self.info(f'mapping file defined {self.map_file.get()}')
     
     def browse_flatten_xml(self):
         en_xml = filedialog.asksaveasfilename(filetypes=[("XML files", "*.xml")])
         if en_xml and not en_xml.lower().endswith(".xml"):
             en_xml += ".xml"
         self.en_xml.set(en_xml)
+        if en_xml:
+            self.info(f'source xml defined {en_xml}')
     
     def browse_translated_xml(self):
         out_xml = filedialog.askopenfilename(filetypes=[("XML files", "*.xml")])
         if out_xml and not out_xml.lower().endswith(".xml"):
             out_xml += ".xml"
         self.out_xml.set(out_xml)
+        if out_xml:
+            self.info(f'translated xml defined {out_xml}')
 
     def unpack_zip(self):
         zip_file = self.in_zip.get()
         if not zip_file:
-            messagebox.showerror("Error", "Please select a ZIP file")
+            self.warn("please select the source ZIP file")
+            messagebox.showerror("Error", "Please select the source ZIP file")
             return
         en_xml = self.en_xml.get()
         if not en_xml:
+            self.warn("please select the source XML file")
             messagebox.showerror("Error", "Please select the source XML file")
             return
         map_file = self.map_file.get()
         if not map_file:
+            self.warn("please select the mapping file")
             messagebox.showerror("Error", "Please select the mapping file")
             return
         
         self.unpacker = Unpacker(self.in_zip.get(),self.map_file.get(),self.en_xml.get())
         
         if self.unpacker.unpack():
-            self.log("ZIP file unpacked successfully.")
+            self.info("ZIP file unpacked successfully.")
         else:
-            self.log("[ERROR]: cannot unpack ZIP file")
+            self.error("cannot unpack ZIP file")
             return 
         if self.unpacker.flatten():
-            self.log("XML files flattened successfully.")
+            self.info("XML files flattened successfully.")
         else:
-            self.log("[ERROR]: cannot flatten XML file")
+            self.error("cannot flatten XML file")
     
     def reconstruct_pack(self):
         out_xml = self.out_xml.get()
         if not out_xml:
+            self.warn('please specify the translated XML file')
             messagebox.showerror("Error", "Please specify the translated XML file")
             return
         map_file = self.map_file.get()
         if not map_file:
+            self.warn('please specify the mapping file')
             messagebox.showerror("Error", "Please specify the mapping file")
             return
         output_zip = self.out_zip.get()
         if not output_zip:
+            self.warn('please specify the output ZIP file')
             messagebox.showerror("Error", "Please specify an output ZIP file")
             return
         
         self.packer = Packer(self.out_xml.get(), self.map_file.get(), self.out_zip.get())
         if self.packer.generate():
-            self.log("Output folders generated successfully.")
+            self.info("Output folders generated successfully.")
         else:
-            self.log("[ERROR]: cannot generate output folders.")
+            self.error("cannot generate output folders.")
             return 
         
         if self.packer.pack():
-            self.log("ZIP file packed successfully.")
+            self.info("ZIP file packed successfully.")
         else:
-            self.log("[ERROR]: cannot pack output ZIP file.")
+            self.error("cannot pack output ZIP file.")
     
     def run_all_steps(self):
         self.unpack_zip()
-        self.log("Translation step (to be implemented)...")
+        self.info("Translation step (to be implemented)...")
         self.reconstruct_pack()
     
     def log(self, message):
         self.log_area.insert(tk.END, message + "\n")
         self.log_area.see(tk.END)
+    
+    def info(self, message):
+        self.log('[ INFO  ]: ' + message)
+    
+    def warn(self, message):
+        self.log('[WARNING]: ' + message)
+
+    def error(self, message):
+        self.log('[ ERROR ]: ' + message)
 
 if __name__ == "__main__":
     root = tk.Tk()
