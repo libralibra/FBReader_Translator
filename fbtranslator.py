@@ -34,7 +34,22 @@ def download_zip(url: str, save_path: str) -> bool:
     except requests.RequestException as e:
         logger.error(f"Failed to download ZIP file: {e}")
         return False
-    
+
+def indent(elem, level=0):
+        ''' add indention to xml elements '''
+        i = "\n" + level * "    "
+        if len(elem):
+            if not elem.text or not elem.text.strip():
+                elem.text = i + "    "
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
+            for subelem in elem:
+                indent(subelem, level + 1)
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
+        elif level and (not elem.tail or not elem.tail.strip()):
+            elem.tail = i
+
 class Unpacker:
     def __init__(self, in_zip : Optional[str] = None, map_file : Optional[str] = None, out_xml : Optional[str] = None) -> None:
         self.in_zip = Path(in_zip) if in_zip else None
@@ -60,21 +75,6 @@ class Unpacker:
         except:
             traceback.print_exc()
             return False
-    
-    def indent(self, elem, level=0):
-        ''' add indention to xml elements '''
-        i = "\n" + level * "    "
-        if len(elem):
-            if not elem.text or not elem.text.strip():
-                elem.text = i + "  "
-            if not elem.tail or not elem.tail.strip():
-                elem.tail = i
-            for subelem in elem:
-                self.indent(subelem, level + 1)
-            if not elem.tail or not elem.tail.strip():
-                elem.tail = i
-        elif level and (not elem.tail or not elem.tail.strip()):
-            elem.tail = i
 
     def flatten(self) -> bool:
         ''' flatten all xml contents into a single xml file, generate mapping file at the same time '''
@@ -97,10 +97,22 @@ class Unpacker:
                         self.entries[name].append(str(rel_path))
                         elem = ET.SubElement(root, "string", name=name)
                         elem.text = string.text
+                # process plurals in: fbreader/library/transfer/src/main/res/values/strings.xml 
+                # and fbreader/tts/src/main/res/values/strings.xml
+                for plurals in tree.findall(".//plurals"):
+                    name = plurals.get("name")
+                    if name:
+                        if name not in self.entries:
+                            self.entries[name] = []
+                        self.entries[name].append(str(rel_path))
+                        plurals_elem = ET.SubElement(root, "plurals", name=name)
+                        for item in plurals.findall("item"):
+                            item_elem = ET.SubElement(plurals_elem, "item", quantity=item.get("quantity"))
+                            item_elem.text = item.text
             logger.info('XML files data collected')
 
             # write out xml
-            self.indent(root)
+            indent(root)
             tree = ET.ElementTree(root)
             tree.write(self.out_xml, encoding="utf-8", xml_declaration=True)
             logger.info(f'XML files flattened: {self.out_xml}')
@@ -159,7 +171,10 @@ class Packer:
         ''' modify the last level folder name from values to values-lang '''
         parts = list(path.parts)
         if parts[-2].startswith("values"):
-            parts[-2] = parts[-2] + '-' + self.lang_suffix
+            if self.lang_suffix[0] != '-':
+                parts[-2] = parts[-2] + '-' + self.lang_suffix
+            else:
+                parts[-2] = parts[-2] + self.lang_suffix
         return Path(*parts)
 
     def generate(self) -> bool:
@@ -170,25 +185,31 @@ class Packer:
         try:
             tree = ET.parse(self.in_xml)
             root = tree.getroot()
-            
+            logger.info(f'src file: {self.in_xml}')
             for key, rel_paths in self.entries.items():
                 for rel_path in rel_paths:
                     modified_path = self.modify_folder_name(rel_path)
                     xml_path = self.out_dir / modified_path
                     xml_path.parent.mkdir(parents=True, exist_ok=True)
-                    
+                    logger.info(f'Key: {key} - Updating: {xml_path}')
+
                     if xml_path.exists():
                         tree = ET.parse(xml_path)
                         xml_root = tree.getroot()
                     else:
                         xml_root = ET.Element("resources")
                     
-                    elem = xml_root.find(f".//string[@name='{key}']")
-                    if not elem:
+                    for string in root.findall(f".//string[@name='{key}']"):
                         elem = ET.SubElement(xml_root, "string", name=key)
+                        elem.text = string.text
                     
-                    elem.text = root.find(f".//string[@name='{key}']").text
-                    
+                    for plurals in root.findall(f".//plurals[@name='{key}']"):
+                        plurals_elem = ET.SubElement(xml_root, "plurals", name=key)
+                        for item in plurals.findall("item"):
+                            item_elem = ET.SubElement(plurals_elem, "item", quantity=item.get("quantity"))
+                            item_elem.text = item.text
+
+                    indent(xml_root)
                     new_tree = ET.ElementTree(xml_root)
                     new_tree.write(xml_path, encoding="utf-8", xml_declaration=True)
             logger.info(f'Folder structure generated: {self.out_dir}')
@@ -223,7 +244,7 @@ class Packer:
 if __name__=='__main__':
     en_url = r'https://fbreader.org/static/strings/android/en.zip'
     src_lang = 'en'
-    des_lang = 'zh-rTW'
+    des_lang = 'zh'
     in_zip = f'{src_lang}.zip'
     out_zip = f'{des_lang}.zip'
     map_file = 'mapping'
@@ -258,4 +279,4 @@ if __name__=='__main__':
         else:
             logger.info(f'Output file has been generated: {out_zip}')
     else:
-        logger.error(f'Cannot download en.zip from: {en_url})
+        logger.error(f'Cannot download en.zip from: {en_url}')
