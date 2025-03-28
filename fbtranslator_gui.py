@@ -1,12 +1,6 @@
-import os
 import sys
-import zipfile
-import xml.etree.ElementTree as ET
-import requests
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-from pathlib import Path
-from typing import Optional, List, Dict
 import threading
 from fbtranslator import *
 
